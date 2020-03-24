@@ -7,7 +7,9 @@ class CPU:
 
     def __init__(self):
         """Construct a new CPU."""
-        pass
+        self.ram = [0] * 256 # Number of bytes
+        self.reg = [0] * 8   # General-purpose registers
+        self.pc = 0          # Program Counter
 
     def load(self):
         """Load a program into memory."""
@@ -60,6 +62,41 @@ class CPU:
 
         print()
 
+    # Outputs the value given the address to search for
+    def ram_read(self, address):
+        return self.ram[address]
+
+    # Stores a value given the address to write to
+    def ram_write(self, value, address):
+        self.ram[address] = value
+
     def run(self):
         """Run the CPU."""
-        pass
+
+        LDI = 0b10000010  # 130
+        PRN = 0b01000111  # 71
+        HLT = 0b00000001  # 1
+
+        running = True
+
+        while running:
+            # IR = Instruction Register.
+            IR = self.ram_read(self.pc)
+            op_a = self.ram_read(self.pc + 1)
+            op_b = self.ram_read(self.pc + 2)
+
+            # LDI: load "immediate", store a value in a register, or "set this register to this value".
+            if IR == LDI:
+                self.reg[op_a] = op_b
+                self.pc += 3
+            # PRN: a pseudo-instruction that prints the numeric value stored in a register.
+            elif IR == PRN:
+                print(self.reg[self.ram_read(self.pc + 1)])
+                self.pc += 2
+
+            # HLT: halt the CPU and exit the emulator.
+            elif IR == HLT:
+                running = False
+
+            else:
+                print("Invalid Command")
