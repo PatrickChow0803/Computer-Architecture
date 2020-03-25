@@ -1,46 +1,59 @@
-"""CPU functionality."""
-
 import sys
+
 
 class CPU:
     """Main CPU class."""
 
     def __init__(self):
         """Construct a new CPU."""
-        self.ram = [0] * 256 # Number of bytes
-        self.reg = [0] * 8   # General-purpose registers
-        self.pc = 0          # Program Counter
+        self.ram = {}
+        self.reg = [0] * 8
+        self.pc = -1
 
-    def load(self):
+    # Increases the PC counter
+    @property
+    def counter(self):
+        self.pc += 1
+        return self.pc
+
+    def load(self, file: str):
         """Load a program into memory."""
 
-        address = 0
+        # with - ensures that a resource is "cleaned up" when the code that uses it finishes running
+        with open(file, 'r') as file:
+            for line in file:
+                line = line.split("#")[0]
 
-        # For now, we've just hardcoded a program:
+                if line:
+                    # Converts the String into an int with base 2
+                    binary = int(line, 2)
+                    self.ram_load(binary)
 
-        program = [
-            # From print8.ls8
-            0b10000010, # LDI R0,8
-            0b00000000,
-            0b00001000,
-            0b01000111, # PRN R0
-            0b00000000,
-            0b00000001, # HLT
-        ]
+    # Loads ram given a value
+    def ram_load(self, value):
+        address = len(self.ram.values())
+        self.ram[address] = value
 
-        for instruction in program:
-            self.ram[address] = instruction
-            address += 1
+    # Reads ram given address
+    def ram_read(self, address):
+        return self.ram[address]
 
+    # Register read given register
+    def reg_read(self, register):
+        return self.reg[register]
 
-    def alu(self, op, reg_a, reg_b):
+    # Register write given register and value
+    def reg_write(self, register, value):
+        self.reg[register] = value
+
+    def alu(self, operation, reg_a, reg_b):
         """ALU operations."""
 
-        if op == "ADD":
-            self.reg[reg_a] += self.reg[reg_b]
-        #elif op == "SUB": etc
+        if operation == "MUL":
+            self.reg_write(reg_a, self.reg[reg_a] * self.reg[reg_b])
+
         else:
-            raise Exception("Unsupported ALU operation")
+            raise Exception("Unsupported operation")
 
     def trace(self):
         """
@@ -49,12 +62,10 @@ class CPU:
         """
 
         print(f"TRACE: %02X | %02X %02X %02X |" % (
-            self.pc,
-            #self.fl,
-            #self.ie,
-            self.ram_read(self.pc),
-            self.ram_read(self.pc + 1),
-            self.ram_read(self.pc + 2)
+            self.counter,
+            self.ram_read(self.counter),
+            self.ram_read(self.counter + 1),
+            self.ram_read(self.counter + 2)
         ), end='')
 
         for i in range(8):
@@ -62,41 +73,40 @@ class CPU:
 
         print()
 
-    # Outputs the value given the address to search for
-    def ram_read(self, address):
-        return self.ram[address]
-
-    # Stores a value given the address to write to
-    def ram_write(self, value, address):
-        self.ram[address] = value
-
     def run(self):
         """Run the CPU."""
 
         LDI = 0b10000010  # 130
         PRN = 0b01000111  # 71
+        MUL = 0b10100010  # 162
         HLT = 0b00000001  # 1
 
         running = True
 
         while running:
-            # IR = Instruction Register.
-            IR = self.ram_read(self.pc)
-            op_a = self.ram_read(self.pc + 1)
-            op_b = self.ram_read(self.pc + 2)
+            IR  = self.ram_read(self.counter)
 
             # LDI: load "immediate", store a value in a register, or "set this register to this value".
             if IR == LDI:
-                self.reg[op_a] = op_b
-                self.pc += 3
+                reg_a = self.ram_read(self.counter)
+                value = self.ram_read(self.counter)
+                self.reg_write(reg_a, value)
+
             # PRN: a pseudo-instruction that prints the numeric value stored in a register.
             elif IR == PRN:
-                print(self.reg[self.ram_read(self.pc + 1)])
-                self.pc += 2
+                reg_a = self.ram_read(self.counter)
+                value = self.reg_read(reg_a)
+                print(value)
 
-            # HLT: halt the CPU and exit the emulator.
+            # Multiplys
+            elif IR == MUL:
+                reg_a = self.ram_read(self.counter)
+                reg_b = self.ram_read(self.counter)
+                self.alu("MUL", reg_a, reg_b)
+
+            # Stop running
             elif IR == HLT:
                 running = False
 
             else:
-                print("Invalid Command")
+                raise Exception("Unsupported instruction")
