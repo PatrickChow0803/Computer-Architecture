@@ -6,28 +6,37 @@ class CPU:
 
     def __init__(self):
         """Construct a new CPU."""
-        self.ram = {}
-        self.reg = [0] * 8
-        self.pc = -1
+        self.registers = [0] * 8 # Number of registers
+        self.ram = [0] * 256     # Bytes
+        self.pc = 0              # Program Counter
+        self.address = 0
+        self.stack = []
 
-    # Increases the PC counter
-    @property
-    def counter(self):
-        self.pc += 1
-        return self.pc
+        # operations
+        self.operations = {
+            "00000001": {"advance": 0, "opCode": "HLT"}, # Halt
+            "10000010": {"advance": 2, "opCode": "LDI"}, # Save
+            "10100010": {"advance": 2, "opCode": "MUL"}, # Multiply
+            "01000110": {"advance": 1, "opCode": "POP"}, # Pop
+            "01000111": {"advance": 1, "opCode": "PRN"}, # Print
+            "01000101": {"advance": 1, "opCode": "PUSH"} # Push
+        }
 
+    # Loads the file and adds each line
     def load(self, file: str):
         """Load a program into memory."""
 
+        program = None
+
         # with - ensures that a resource is "cleaned up" when the code that uses it finishes running
         with open(file, 'r') as file:
-            for line in file:
-                line = line.split("#")[0]
+            program = file.readlines()
+        for instruction in program:
+            if "#" in instruction:
+                instruction = instruction[: instruction.index("#")].strip()
 
-                if line:
-                    # Converts the String into an int with base 2
-                    binary = int(line, 2)
-                    self.ram_load(binary)
+            self.ram[self.address] = instruction
+            self.address += 1
 
     # Loads ram given a value
     def ram_load(self, value):
@@ -37,6 +46,9 @@ class CPU:
     # Reads ram given address
     def ram_read(self, address):
         return self.ram[address]
+
+    def ram_write(self, value, address):
+        self.ram[address] = value
 
     # Register read given register
     def reg_read(self, register):
@@ -49,9 +61,16 @@ class CPU:
     def alu(self, operation, reg_a, reg_b):
         """ALU operations."""
 
-        if operation == "MUL":
-            self.reg_write(reg_a, self.reg[reg_a] * self.reg[reg_b])
-
+        if operation == "LDI":
+            self.registers[reg_a] = reg_b
+        elif operation == "PRN":
+            print(self.registers[reg_a])
+        elif operation == "MUL":
+            self.registers[reg_a] = self.registers[reg_a] * self.registers[reg_b]
+        elif operation == "PUSH":
+            self.stack.append(self.registers[reg_a])
+        elif operation == "POP":
+            self.registers[reg_a] = self.stack.pop()
         else:
             raise Exception("Unsupported operation")
 
@@ -62,51 +81,31 @@ class CPU:
         """
 
         print(f"TRACE: %02X | %02X %02X %02X |" % (
-            self.counter,
-            self.ram_read(self.counter),
-            self.ram_read(self.counter + 1),
-            self.ram_read(self.counter + 2)
+            self.pc,
+            self.ram_read(self.pc),
+            self.ram_read(self.pc + 1),
+            self.ram_read(self.pc + 2)
         ), end='')
 
         for i in range(8):
             print(" %02X" % self.reg[i], end='')
 
-        print()
-
     def run(self):
         """Run the CPU."""
 
-        LDI = 0b10000010  # 130
-        PRN = 0b01000111  # 71
-        MUL = 0b10100010  # 162
-        HLT = 0b00000001  # 1
-
         running = True
 
-        while running:
-            IR  = self.ram_read(self.counter)
+        while self.pc <= self.address:
+            # IR = Instruction Register
+            IR = self.ram_read(self.pc)
+            objMap = self.operations[IR]
+            op = objMap["opCode"]
 
-            # LDI: load "immediate", store a value in a register, or "set this register to this value".
-            if IR == LDI:
-                reg_a = self.ram_read(self.counter)
-                value = self.ram_read(self.counter)
-                self.reg_write(reg_a, value)
+            if op == "HLT":
+                return
 
-            # PRN: a pseudo-instruction that prints the numeric value stored in a register.
-            elif IR == PRN:
-                reg_a = self.ram_read(self.counter)
-                value = self.reg_read(reg_a)
-                print(value)
+            operand_a = int(self.ram_read(self.pc + 1), 2)
+            operand_b = int(self.ram_read(self.pc + 2), 2)
 
-            # Multiplys
-            elif IR == MUL:
-                reg_a = self.ram_read(self.counter)
-                reg_b = self.ram_read(self.counter)
-                self.alu("MUL", reg_a, reg_b)
-
-            # Stop running
-            elif IR == HLT:
-                running = False
-
-            else:
-                raise Exception("Unsupported instruction")
+            self.alu(op, operand_a, operand_b)
+            self.pc += 1 + objMap["advance"]
